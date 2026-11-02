@@ -1,0 +1,53 @@
+name: Publish Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release.yml]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v1.1.0
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v1.1.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.4'
+      - name: Refuse to replace an existing release
+        shell: pwsh
+        run: |
+          gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) { throw 'This release already exists; use a new version.' }
+          $global:LASTEXITCODE = 0
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python build.py
+      - run: python tools/package_release.py
+      - name: Smoke test the actual packaged executable
+        shell: pwsh
+        run: |
+          $bundle = 'release/ExcelToiPhoneVCF-1.1.0-windows-x64'
+          python src/excel_to_iphone_vcf.py examples/contacts.csv -o source-test.vcf
+          if ($LASTEXITCODE -ne 0) { throw 'Source conversion failed.' }
+          $binary = (Resolve-Path "$bundle/ExcelToiPhoneVCF.exe").Path
+          $arguments = '"' + (Resolve-Path "$bundle/examples/contacts.csv").Path + '" -o "' + (Join-Path $PWD 'binary-test.vcf') + '"'
+          $process = Start-Process -FilePath $binary -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Executable conversion failed.' }
+          $sourceHash = (Get-FileHash source-test.vcf -Algorithm SHA256).Hash
+          $binaryHash = (Get-FileHash binary-test.vcf -Algorithm SHA256).Hash
+          if ($sourceHash -ne $binaryHash) { throw 'Source and binary output differ.' }
+      - name: Publish tagged release and assets
+        shell: pwsh
+        run: |
+          gh release create $env:RELEASE_TAG 'release/ExcelToiPhoneVCF-1.1.0-windows-x64.zip' 'release/SHA256SUMS.txt' --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'v1.1.0 - Excel 转 iPhone 通讯录' --notes-file CHANGELOG.md

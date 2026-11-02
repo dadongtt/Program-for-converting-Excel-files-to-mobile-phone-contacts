@@ -1,0 +1,28 @@
+# Local contacts and generated output
+*.xlsx
+*.xls
+*.vcf
+*.csv
+!examples/contacts.csv
+
+# Local handoff notes and personal environment instructions
+HANDOFF_NOTES.md
+AGENTS.md
+
+# Build products and local environments
+release/
+build/
+dist/
+.venv/
+__pycache__/
+*.py[cod]
+*.spec
+.env
+.env.*
+.publication/
+
+# Editor and OS files
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
